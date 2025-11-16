@@ -1,17 +1,25 @@
+
+
 import requests
 from bs4 import BeautifulSoup
 import time
 from telegram import Bot
 from telegram.constants import ParseMode
+import threading
+from flask import Flask
+
+# ======================================================
+# CONFIGURACIÓN DEL BOT
+# ======================================================
 
 TOKEN = "AQUI_TU_TOKEN"
 CHAT_ID = "AQUI_TU_CHAT_ID"
 
 bot = Bot(token=TOKEN)
 
-# ============================
-# CATEGORÍAS RETAIL
-# ============================
+# ======================================================
+# TIENDAS RETAIL
+# ======================================================
 
 TIENDAS = [
     {
@@ -58,9 +66,9 @@ TIENDAS = [
     }
 ]
 
-# ========================================
-# SECCIÓN VIAJES (LATAM, SKY, JETSMART, COCHA)
-# ========================================
+# ======================================================
+# OFERTAS DE VIAJES
+# ======================================================
 
 VIAJES = [
     {
@@ -89,15 +97,17 @@ VIAJES = [
     }
 ]
 
-enviados = set()
+# ======================================================
+# FUNCIONES DEL BOT
+# ======================================================
 
+enviados = set()
 
 def limpiar_precio(texto):
     if not texto:
         return None
     texto = texto.replace("$", "").replace(".", "").replace(",", "").strip()
     return int(texto) if texto.isdigit() else None
-
 
 def escanear_categoria(url, tienda):
     try:
@@ -112,8 +122,7 @@ def escanear_categoria(url, tienda):
             normal_txt = item.select_one(tienda["selector_normal"])
 
             precio = limpiar_precio(precio_txt.text if precio_txt else None)
-            precio_normal = limpiar_precio(
-                normal_txt.text if normal_txt else None)
+            precio_normal = limpiar_precio(normal_txt.text if normal_txt else None)
 
             if not precio or not precio_normal:
                 continue
@@ -122,8 +131,7 @@ def escanear_categoria(url, tienda):
 
             if precio == 0 or descuento >= 0.70:
                 link_tag = item.find("a", href=True)
-                link = tienda["prefijo"] + \
-                    link_tag["href"] if link_tag else url
+                link = tienda["prefijo"] + link_tag["href"] if link_tag else url
                 nombre = item.text.strip().split("\n")[0][:80]
 
                 resultados.append({
@@ -139,7 +147,6 @@ def escanear_categoria(url, tienda):
     except Exception:
         return []
 
-
 def escanear_viajes():
     resultados = []
 
@@ -151,8 +158,7 @@ def escanear_viajes():
 
             for item in items:
                 precio_txt = item.select_one(site["selector_precio"])
-                precio = limpiar_precio(
-                    precio_txt.text if precio_txt else None)
+                precio = limpiar_precio(precio_txt.text if precio_txt else None)
 
                 if not precio or precio == 0:
                     continue
@@ -171,7 +177,6 @@ def escanear_viajes():
             continue
 
     return resultados
-
 
 def enviar_alerta(prod):
     if prod["url"] in enviados:
@@ -194,19 +199,42 @@ def enviar_alerta(prod):
 
     enviados.add(prod["url"])
 
+# ======================================================
+# HILO PRINCIPAL DEL BOT (LOOP INFINITO)
+# ======================================================
 
-print("BOT GLITCH+VIAJES corriendo en VS Code...")
+def iniciar_bot():
+    print("BOT GLITCH+VIAJES corriendo...")
+    while True:
+        for tienda in TIENDAS:
+            for categoria in tienda["categorias"]:
+                glitches = escanear_categoria(categoria, tienda)
+                for g in glitches:
+                    enviar_alerta(g)
+                time.sleep(3)
 
-while True:
-    for tienda in TIENDAS:
-        for categoria in tienda["categorias"]:
-            glitches = escanear_categoria(categoria, tienda)
-            for g in glitches:
-                enviar_alerta(g)
-            time.sleep(3)
+        ofertas = escanear_viajes()
+        for o in ofertas:
+            enviar_alerta(o)
 
-    ofertas = escanear_viajes()
-    for o in ofertas:
-        enviar_alerta(o)
+        time.sleep(45)
 
-    time.sleep(45)
+# ======================================================
+# SERVIDOR FAKE PARA QUE RENDER NO APAGUE EL BOT
+# ======================================================
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot price-glitch está corriendo correctamente (Render Free OK)."
+
+def iniciar_servidor():
+    app.run(host="0.0.0.0", port=10000)
+
+# ======================================================
+# LANZAR EL BOT Y EL SERVIDOR EN PARALELO
+# ======================================================
+
+threading.Thread(target=iniciar_bot).start()
+threading.Thread(target=iniciar_servidor).start()
