@@ -1,5 +1,3 @@
-
-
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -238,3 +236,4 @@ def iniciar_servidor():
 
 threading.Thread(target=iniciar_bot).start()
 threading.Thread(target=iniciar_servidor).start()
+
